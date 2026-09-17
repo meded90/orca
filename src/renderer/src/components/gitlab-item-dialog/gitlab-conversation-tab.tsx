@@ -26,6 +26,7 @@ export function GitLabConversationTab({ item, state, reviewActions }: Props) {
           <CommentCard
             key={comment.id}
             comment={comment}
+            imageSources={details.imageSources}
             canResolve={isMR}
             resolving={resolvingThreadId === comment.threadId}
             onResolve={(threadId, resolved) =>

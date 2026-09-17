@@ -8,6 +8,7 @@ import type {
   GitLabWorkItemDetails
 } from '../../shared/gitlab-types'
 import type { IssueSourcePreference } from '../../shared/repo-types'
+import { loadGitLabImages } from './attachment-images'
 import { mapIssueToWorkItem, mapMRToWorkItem } from './mappers'
 import { mapGitLabUser, type GitLabRawUser } from './gitlab-assignable-user-mapping'
 import { encodedProject } from './project-path-encoding'
@@ -78,10 +79,24 @@ export async function getWorkItemDetails(
   }
   await acquire()
   try {
-    if (type === 'issue') {
-      return await fetchIssueDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
+    const details =
+      type === 'issue'
+        ? await fetchIssueDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
+        : await fetchMRDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
+    if (!details) {
+      return null
     }
-    return await fetchMRDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
+    const imageSources = await loadGitLabImages(
+      [details.body, ...details.comments.map((comment) => comment.body)],
+      repoPath,
+      projectRef,
+      connectionId,
+      localGitOptions
+    ).catch((error) => {
+      console.warn('[gitlab] Attachment previews unavailable:', error)
+      return {}
+    })
+    return { ...details, imageSources }
   } catch {
     return null
   } finally {

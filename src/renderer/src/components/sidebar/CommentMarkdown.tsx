@@ -14,6 +14,7 @@ import {
   type CommentMarkdownLinkClickHandler,
   type DocumentCodeBlockRenderer
 } from './comment-markdown-element-renderers'
+import { rehypeGitLabImages } from './comment-markdown-gitlab-images'
 import { remarkNativeChatFileLinks } from './comment-markdown-native-chat-file-links'
 
 export type { CommentMarkdownLinkClickHandler } from './comment-markdown-element-renderers'
@@ -183,6 +184,7 @@ const rehypePlugins: MarkdownPlugins = [rehypeRaw, [rehypeSanitize, commentMarkd
 
 type CommentMarkdownProps = React.ComponentPropsWithoutRef<'div'> & {
   content: string
+  gitlabImageSources?: Readonly<Record<string, string>>
   variant?: 'compact' | 'document'
   githubRepo?: GitHubRepoReference | null
   onLinkClick?: CommentMarkdownLinkClickHandler
@@ -199,6 +201,7 @@ const CommentMarkdown = React.memo(
   React.forwardRef<HTMLDivElement, CommentMarkdownProps>(function CommentMarkdown(
     {
       content,
+      gitlabImageSources,
       className,
       variant = 'compact',
       githubRepo,
@@ -232,6 +235,18 @@ const CommentMarkdown = React.memo(
       return githubRepo ? [...plugins, remarkGitHubReferences(githubRepo)] : plugins
     }, [githubRepo, linkifyFilePaths])
 
+    const activeRehypePlugins = React.useMemo<MarkdownPlugins>(
+      () =>
+        gitlabImageSources
+          ? [
+              rehypeRaw,
+              rehypeGitLabImages(gitlabImageSources),
+              [rehypeSanitize, commentMarkdownSanitizeSchema]
+            ]
+          : rehypePlugins,
+      [gitlabImageSources]
+    )
+
     return (
       <div
         ref={ref}
@@ -247,7 +262,7 @@ const CommentMarkdown = React.memo(
       >
         <Markdown
           remarkPlugins={activeRemarkPlugins}
-          rehypePlugins={rehypePlugins}
+          rehypePlugins={activeRehypePlugins}
           components={components}
           urlTransform={
             allowFileUriLinks ? commentMarkdownFileUriUrlTransform : commentMarkdownUrlTransform
