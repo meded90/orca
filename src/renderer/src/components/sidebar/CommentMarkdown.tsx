@@ -197,6 +197,7 @@ type CommentMarkdownProps = React.ComponentPropsWithoutRef<'div'> & {
 // Why forwardRef + rest props: Radix's HoverCardTrigger asChild merges a ref
 // and event handlers (onPointerEnter, onPointerLeave, data-state, etc.) onto
 // the child. Without forwarding both, the hover card cannot open or position.
+/** Resolve provider previews before sanitizing the rendered Markdown. */
 const CommentMarkdown = React.memo(
   React.forwardRef<HTMLDivElement, CommentMarkdownProps>(function CommentMarkdown(
     {

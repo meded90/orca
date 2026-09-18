@@ -235,6 +235,7 @@ export function createCompactCommentMarkdownComponents(
   }
 }
 
+/** Preserve sanitized image dimensions in document previews and lightboxes. */
 export function createDocumentCommentMarkdownComponents(
   onLinkClick?: CommentMarkdownLinkClickHandler,
   renderCodeBlock?: DocumentCodeBlockRenderer

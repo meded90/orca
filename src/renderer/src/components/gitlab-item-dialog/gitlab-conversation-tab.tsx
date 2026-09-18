@@ -12,6 +12,7 @@ type Props = {
   reviewActions: GitLabReviewActions
 }
 
+/** Share the item preview map across discussion notes. */
 export function GitLabConversationTab({ item, state, reviewActions }: Props) {
   const { details, loading, resolvingThreadId } = state
   const isMR = item.type === 'mr'

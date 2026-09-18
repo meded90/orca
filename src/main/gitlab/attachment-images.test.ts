@@ -135,3 +135,35 @@ describe('GitLab attachment budgets and host routing', () => {
     )
   })
 })
+
+describe('HTML image syntax and serialized budgets', () => {
+  it.each([
+    `<img src = "${src}">`,
+    `<img SRC = '${src}'>`,
+    `<img src=${src}>`,
+    `<img\nsrc\t=\t"${src}">`,
+    `<img title="a > b" src="${src}">`,
+    `<img data-src="/wrong.png" src="${src}">`
+  ])('extracts the actual src from %s', (html) => {
+    expect(collectGitLabImages([html])).toEqual([src])
+  })
+  it('ignores data attributes and attribute text that mentions src', () => {
+    expect(collectGitLabImages([`<img data-src="${src}" title='src="${src}"'>`])).toEqual([])
+  })
+  it('accounts for UTF-8 keys, JSON escaping and aliases in a remote budget', async () => {
+    capture.mockReset().mockResolvedValue({ stdout: png })
+    const path = src.replace('screen.png', 'снимок.png')
+    const full = `https://${project.host}/${project.path}${path}`
+    const budget = 180
+    const result = await loadGitLabImages(
+      [`![a](${path}) ![b](${full})`],
+      '/repo',
+      project,
+      null,
+      {},
+      budget
+    )
+    expect(Object.keys(result)).toHaveLength(1)
+    expect(Buffer.byteLength(JSON.stringify(result)) - 2).toBeLessThanOrEqual(budget)
+  })
+})

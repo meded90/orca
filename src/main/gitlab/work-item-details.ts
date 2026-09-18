@@ -28,6 +28,11 @@ import {
   type ProjectRef
 } from './gl-utils'
 
+export type GitLabDetailPreviewOptions = {
+  includeImages?: boolean
+  maxReplyBytes?: number
+}
+
 // ── Top-level aggregator ───────────────────────────────────────────
 
 type GitLabRawIssue = Parameters<typeof mapIssueToWorkItem>[0] & {
@@ -58,7 +63,8 @@ export async function getWorkItemDetails(
   preference?: IssueSourcePreference,
   connectionId?: string | null,
   projectRefOverride?: ProjectRef | null,
-  localGitOptions: LocalGitExecOptions = {}
+  localGitOptions: LocalGitExecOptions = {},
+  previewOptions: GitLabDetailPreviewOptions = {}
 ): Promise<GitLabWorkItemDetails | null> {
   // Why: detail fetches must use the same project source as the list row
   // that opened them, otherwise forked repos can show a row from one remote
@@ -83,15 +89,24 @@ export async function getWorkItemDetails(
       type === 'issue'
         ? await fetchIssueDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
         : await fetchMRDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
-    if (!details) {
-      return null
+    if (!details || !previewOptions.includeImages) {
+      return details
     }
+    const imageBudget =
+      previewOptions.maxReplyBytes === undefined
+        ? undefined
+        : Math.max(
+            0,
+            previewOptions.maxReplyBytes -
+              Buffer.byteLength(JSON.stringify({ ...details, imageSources: {} }))
+          )
     const imageSources = await loadGitLabImages(
       [details.body, ...details.comments.map((comment) => comment.body)],
       repoPath,
       projectRef,
       connectionId,
-      localGitOptions
+      localGitOptions,
+      imageBudget
     ).catch((error) => {
       console.warn('[gitlab] Attachment previews unavailable:', error)
       return {}

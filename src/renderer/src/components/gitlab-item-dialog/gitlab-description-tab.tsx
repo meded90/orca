@@ -23,6 +23,7 @@ type Props = {
   reviewActions: GitLabReviewActions
 }
 
+/** Keep authenticated previews separate from the editable description. */
 export function GitLabDescriptionTab({ item, state, detailsEditing, reviewActions }: Props) {
   const {
     bodyDraft,

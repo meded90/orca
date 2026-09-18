@@ -24,6 +24,7 @@ type ExpandableMarkdownImageProps = {
  * Inline markdown image that opens a viewport-centered lightbox on click.
  * The shared dialog primitive owns modal focus, Escape, and focus restoration.
  */
+/** Preserve authored preview dimensions while opening the full image in the lightbox. */
 export function ExpandableMarkdownImage({
   src,
   width,

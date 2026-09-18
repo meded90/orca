@@ -11,6 +11,7 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const MAX_TOTAL_BYTES = 16 * 1024 * 1024
 const MAX_IMAGES = 16
 
+/** Resolve only uploads belonging to the selected GitLab project. */
 export function gitLabUploadPath(src: string, project: ProjectRef): string | null {
   let pathname = src
   if (/^https?:\/\//i.test(src)) {
@@ -49,6 +50,7 @@ export function gitLabUploadPath(src: string, project: ProjectRef): string | nul
   }
 }
 
+/** Extract preview destinations while leaving Markdown code and ordinary links alone. */
 export function collectGitLabImages(contents: readonly string[]): string[] {
   const urls = new Set<string>()
   for (const content of contents) {
@@ -57,8 +59,16 @@ export function collectGitLabImages(contents: readonly string[]): string[] {
         urls.add(token.href)
       }
       if (token.type === 'html') {
-        for (const match of token.text.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)) {
-          urls.add(match[1])
+        for (const match of token.text.matchAll(/<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi)) {
+          const attributes = match[0].slice(4, -1)
+          for (const attribute of attributes.matchAll(
+            /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
+          )) {
+            if (attribute[1].toLowerCase() === 'src') {
+              urls.add(attribute[2] ?? attribute[3] ?? attribute[4] ?? '')
+              break
+            }
+          }
         }
       }
     })
@@ -66,6 +76,7 @@ export function collectGitLabImages(contents: readonly string[]): string[] {
   return [...urls]
 }
 
+/** Reject login pages and active formats before creating a raster preview. */
 function imageMime(bytes: Buffer): string | undefined {
   if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     return 'image/png'
@@ -82,13 +93,19 @@ function imageMime(bytes: Buffer): string | undefined {
   return undefined
 }
 
+/** Load authenticated previews within a shared deadline and serialized response budget. */
 export async function loadGitLabImages(
   contents: readonly string[],
   repoPath: string,
   project: ProjectRef,
   connectionId?: string | null,
-  localGitOptions: LocalGitExecOptions = {}
+  localGitOptions: LocalGitExecOptions = {},
+  maxTotalBytes = MAX_TOTAL_BYTES
 ): Promise<Record<string, string>> {
+  const budget = Math.min(MAX_TOTAL_BYTES, maxTotalBytes)
+  if (budget <= 0) {
+    return {}
+  }
   const paths = new Map<string, string[]>()
   for (const src of collectGitLabImages(contents)) {
     const path = gitLabUploadPath(src, project)
@@ -106,7 +123,7 @@ export async function loadGitLabImages(
   let total = 0
   const signal = AbortSignal.timeout(15_000)
   await mapWithConcurrency([...paths], 3, async ([path, aliases]) => {
-    if (signal.aborted || total >= MAX_TOTAL_BYTES) {
+    if (signal.aborted || total >= budget) {
       return
     }
     try {
@@ -133,10 +150,11 @@ export async function loadGitLabImages(
       }
       for (const src of aliases) {
         // Each alias is serialized separately in the work-item response.
-        if (total + dataUrl.length > MAX_TOTAL_BYTES) {
+        const entryBytes = Buffer.byteLength(JSON.stringify(src)) + dataUrl.length + 4
+        if (total + entryBytes > budget) {
           break
         }
-        total += dataUrl.length
+        total += entryBytes
         sources[src] = dataUrl
       }
     } catch {

@@ -2,6 +2,7 @@ import type { Root, RootContent } from 'hast'
 
 type Node = Root | RootContent
 
+/** Substitute authenticated previews while consuming GitLab image-size annotations. */
 export function rehypeGitLabImages(sources: Readonly<Record<string, string>>) {
   return () =>
     (tree: Root): void => {

@@ -118,6 +118,7 @@ export function dedupeGitLabUsers(users: readonly GitLabAssignableUser[]): GitLa
   return Array.from(byKey.values()).sort((a, b) => a.username.localeCompare(b.username))
 }
 
+/** Render note previews without changing the Markdown used for editing. */
 export function CommentCard({
   comment,
   imageSources,
