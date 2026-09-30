@@ -777,3 +777,38 @@ it('observes both rejected probes when cancelling origin and upstream discovery'
   controller.abort()
   await rejected
 })
+
+it('returns a ready upstream project without waiting for a stalled origin', async () => {
+  _resetProjectRefCache()
+  _resetRemoteNameListingCache()
+  gitExecFileAsyncMock.mockReset()
+  gitExecFileAsyncMock.mockImplementation((args: string[], options: { signal?: AbortSignal }) => {
+    if (args[1] !== 'get-url') {
+      return Promise.resolve({ stdout: 'origin\nupstream\n' })
+    }
+    if (args[2] === 'upstream') {
+      return Promise.resolve({ stdout: 'git@gitlab.com:group/upstream.git' })
+    }
+    const signal = options.signal
+    if (!signal) {
+      throw new Error('Missing origin cancellation')
+    }
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  })
+  const controller = new AbortController()
+  let settled = false
+  const discovery = getIssueProjectRef('/ready-upstream', ['gitlab.com'], null, {
+    signal: controller.signal
+  }).then((project) => {
+    settled = true
+    return project
+  })
+  try {
+    await vi.waitFor(() => expect(settled).toBe(true))
+    expect(await discovery).toEqual({ host: 'gitlab.com', path: 'group/upstream' })
+  } finally {
+    controller.abort()
+  }
+})

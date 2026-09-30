@@ -193,14 +193,21 @@ export async function getIssueProjectRef(
     connectionId,
     localGitOptions
   )
-  const upstreamPromise = (async () => {
-    if (await shouldProbeGitRemote(repoPath, 'upstream', connectionId, localGitOptions)) {
-      return getProjectRefForRemote(repoPath, 'upstream', knownHosts, connectionId, localGitOptions)
+  // Observe cancellation even when upstream wins and origin is never awaited.
+  void originPromise.catch(() => {})
+  if (await shouldProbeGitRemote(repoPath, 'upstream', connectionId, localGitOptions)) {
+    const upstream = await getProjectRefForRemote(
+      repoPath,
+      'upstream',
+      knownHosts,
+      connectionId,
+      localGitOptions
+    )
+    if (upstream) {
+      return upstream
     }
-    return null
-  })()
-  const [origin, upstream] = await Promise.all([originPromise, upstreamPromise])
-  return upstream ?? origin
+  }
+  return originPromise
 }
 
 export type ResolvedIssueSource = {
