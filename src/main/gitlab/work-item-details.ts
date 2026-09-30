@@ -70,15 +70,19 @@ export async function getWorkItemDetails(
   // Why: detail fetches must use the same project source as the list row
   // that opened them, otherwise forked repos can show a row from one remote
   // and a detail sheet from another.
+  previewOptions.signal?.throwIfAborted()
+  const executionOptions = previewOptions.signal
+    ? { ...localGitOptions, signal: previewOptions.signal }
+    : localGitOptions
   const projectRef =
     projectRefOverride ??
     (
       await resolveIssueSource(
         repoPath,
         preference,
-        await getGlabKnownHosts(connectionId, localGitOptions),
+        await getGlabKnownHosts(connectionId, executionOptions),
         connectionId,
-        localGitOptions
+        executionOptions
       )
     ).source
   if (!projectRef) {
@@ -86,9 +90,6 @@ export async function getWorkItemDetails(
   }
   previewOptions.signal?.throwIfAborted()
   await acquire(undefined, previewOptions.signal)
-  const executionOptions = previewOptions.signal
-    ? { ...localGitOptions, signal: previewOptions.signal }
-    : localGitOptions
   try {
     const details =
       type === 'issue'

@@ -90,16 +90,19 @@ export async function getProjectRefForRemote(
     projectRefCache.delete(cacheKey)
   }
 
-  return runProjectRefProbeOnce(cacheKey, (ownsKey) =>
-    resolveProjectRefForRemote(
-      repoPath,
-      remoteName,
-      knownHosts,
-      connectionId,
-      cacheKey,
-      ownsKey,
-      localGitOptions
-    )
+  return runProjectRefProbeOnce(
+    cacheKey,
+    (ownsKey) =>
+      resolveProjectRefForRemote(
+        repoPath,
+        remoteName,
+        knownHosts,
+        connectionId,
+        cacheKey,
+        ownsKey,
+        localGitOptions
+      ),
+    localGitOptions.signal
   )
 }
 
@@ -125,6 +128,7 @@ async function resolveProjectRefForRemote(
       {
         repoPath,
         connectionId,
+        ...(localGitOptions.signal ? { signal: localGitOptions.signal } : {}),
         ...(localGitOptions.wslDistro ? { wslDistro: localGitOptions.wslDistro } : {}),
         ...(localGitOptions.admissionTier ? { admissionTier: localGitOptions.admissionTier } : {})
       },
@@ -153,6 +157,7 @@ async function resolveProjectRefForRemote(
       return remoteCandidate
     }
   } catch (error) {
+    localGitOptions.signal?.throwIfAborted()
     // Why: a wedged or killed probe is not evidence the remote is not GitLab —
     // caching it would misdetect the forge until the negative expires (P1-D).
     // SSH failures stay uncached outright rather than adopting the generic
@@ -188,19 +193,14 @@ export async function getIssueProjectRef(
     connectionId,
     localGitOptions
   )
-  if (await shouldProbeGitRemote(repoPath, 'upstream', connectionId, localGitOptions)) {
-    const upstream = await getProjectRefForRemote(
-      repoPath,
-      'upstream',
-      knownHosts,
-      connectionId,
-      localGitOptions
-    )
-    if (upstream) {
-      return upstream
+  const upstreamPromise = (async () => {
+    if (await shouldProbeGitRemote(repoPath, 'upstream', connectionId, localGitOptions)) {
+      return getProjectRefForRemote(repoPath, 'upstream', knownHosts, connectionId, localGitOptions)
     }
-  }
-  return originPromise
+    return null
+  })()
+  const [origin, upstream] = await Promise.all([originPromise, upstreamPromise])
+  return upstream ?? origin
 }
 
 export type ResolvedIssueSource = {
@@ -300,6 +300,7 @@ async function isGlabConfiguredForRemoteHost(
     }
     return true
   } catch (error) {
+    localGitOptions.signal?.throwIfAborted()
     const execLike = error as { stdout?: unknown; stderr?: unknown; message?: unknown }
     const output =
       [execLike.stdout, execLike.stderr, execLike.message]

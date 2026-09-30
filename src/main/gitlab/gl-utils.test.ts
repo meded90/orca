@@ -721,3 +721,59 @@ it('refuses an already-aborted GitLab operation before admission', async () => {
     name: 'AbortError'
   })
 })
+
+it('cancels a cold project lookup without poisoning the project cache or a shared reader', async () => {
+  _resetProjectRefCache()
+  gitExecFileAsyncMock.mockReset()
+  let completeShared: (value: { stdout: string }) => void = () => {}
+  gitExecFileAsyncMock.mockImplementation((_args, options: { signal?: AbortSignal }) => {
+    const signal = options.signal
+    if (!signal) {
+      return new Promise((resolve) => {
+        completeShared = resolve
+      })
+    }
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  })
+  const shared = getProjectRefForRemote('/cancel-project', 'origin')
+  const controller = new AbortController()
+  const abandoned = getProjectRefForRemote('/cancel-project', 'origin', ['gitlab.com'], null, {
+    signal: controller.signal
+  })
+  const rejected = expect(abandoned).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejected
+  expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(2)
+  completeShared({ stdout: 'git@gitlab.com:group/project.git' })
+  expect(await shared).toEqual({ host: 'gitlab.com', path: 'group/project' })
+  expect(await getProjectRefForRemote('/cancel-project', 'origin')).toEqual({
+    host: 'gitlab.com',
+    path: 'group/project'
+  })
+  expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(2)
+})
+
+it('observes both rejected probes when cancelling origin and upstream discovery', async () => {
+  _resetProjectRefCache()
+  _resetRemoteNameListingCache()
+  gitExecFileAsyncMock.mockReset()
+  gitExecFileAsyncMock.mockImplementation((_args, options: { signal?: AbortSignal }) => {
+    const signal = options.signal
+    if (!signal) {
+      throw new Error('Missing discovery cancellation')
+    }
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  })
+  const controller = new AbortController()
+  const discovery = getIssueProjectRef('/cancel-origin-and-upstream', ['gitlab.com'], null, {
+    signal: controller.signal
+  })
+  const rejected = expect(discovery).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.waitFor(() => expect(gitExecFileAsyncMock).toHaveBeenCalledTimes(2))
+  controller.abort()
+  await rejected
+})

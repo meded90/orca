@@ -26,6 +26,7 @@ vi.mock('./gl-utils', () => ({
 }))
 import { loadGitLabImages } from './attachment-images'
 import { getWorkItemDetails } from './work-item-details'
+import { acquire, getGlabKnownHosts } from './gl-utils'
 beforeEach(() => {
   release.mockClear()
   vi.mocked(loadGitLabImages).mockClear()
@@ -89,4 +90,33 @@ it('charges the description and metadata before budgeting remote previews', asyn
     {},
     expectedBudget
   )
+})
+
+it('cancels cold project discovery before admission or attachment downloads', async () => {
+  vi.mocked(acquire).mockClear()
+  vi.mocked(getGlabKnownHosts).mockImplementationOnce((_connection, options) => {
+    const signal = options?.signal
+    if (!signal) {
+      throw new Error('Missing project-discovery cancellation')
+    }
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  })
+  const controller = new AbortController()
+  const loading = getWorkItemDetails(
+    '/repo',
+    1,
+    'issue',
+    undefined,
+    null,
+    undefined,
+    {},
+    { includeImages: true, signal: controller.signal }
+  )
+  const rejected = expect(loading).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejected
+  expect(acquire).not.toHaveBeenCalled()
+  expect(loadGitLabImages).not.toHaveBeenCalled()
 })

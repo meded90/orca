@@ -174,8 +174,12 @@ export async function getGlabKnownHosts(
   }
   // Why: only join a probe still young enough to answer, so a wedged one cannot
   // pin every later retry for the life of the process (P1-D).
-  return runCoalescedProbe(knownHostsInFlightByExecutionContext, key, (ownsKey) =>
-    probeGlabKnownHosts(key, cacheKey, ownsKey, connectionId, localGitOptions)
+  return runCoalescedProbe(
+    knownHostsInFlightByExecutionContext,
+    key,
+    (ownsKey) => probeGlabKnownHosts(key, cacheKey, ownsKey, connectionId, localGitOptions),
+    undefined,
+    localGitOptions.signal
   )
 }
 
@@ -191,6 +195,7 @@ async function probeGlabKnownHosts(
     // or reconnected SSH/relay results, and bound an otherwise global probe.
     const { stdout, stderr } = await glabExecFileAsync(['auth', 'status'], {
       timeout: GLAB_KNOWN_HOSTS_TIMEOUT_MS,
+      ...(localGitOptions.signal ? { signal: localGitOptions.signal } : {}),
       // Why: a local probe would cache the default distro's auth under 'native'
       // and wake an idle VM. A connection-keyed probe keeps the retry — glab never
       // runs over SSH/relay, so the calls it gates take that same fallback.
@@ -210,6 +215,7 @@ async function probeGlabKnownHosts(
     }
     return merged
   } catch {
+    localGitOptions.signal?.throwIfAborted()
     // Keep failures uncached so auth or tunnel recovery is discovered later.
     const cached = knownHostsCacheByExecutionContext.get(cacheKey)
     return cached?.key === key ? cached.hosts : [...DEFAULT_GITLAB_HOSTS]
