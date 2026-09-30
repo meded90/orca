@@ -35,3 +35,19 @@ describe('GitLab image rendering', () => {
     expect(markup).toContain('{width=258 height=118}')
   })
 })
+
+it.each([
+  ['258px', '258'],
+  ['75%', '75%']
+])('renders GitLab width %s without stray annotation text', (width, expected) => {
+  const src = '/uploads/0123456789abcdef0123456789abcdef/screen.png'
+  const markup = renderToStaticMarkup(
+    <CommentMarkdown
+      variant="document"
+      content={`![screen](${src}){width=${width}}`}
+      gitlabImageSources={{ [src]: 'data:image/png;base64,abc123' }}
+    />
+  )
+  expect(markup).toContain(`width="${expected}"`)
+  expect(markup).not.toContain('{width=')
+})

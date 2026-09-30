@@ -18,12 +18,13 @@ export function rehypeGitLabImages(sources: Readonly<Record<string, string>>) {
             }
             const next = node.children[index + 1]
             const size =
-              next?.type === 'text' && /^\{((?:(?:width|height)=\d+\s*)+)\}/.exec(next.value)
+              next?.type === 'text' &&
+              /^\{((?:(?:width|height)=\d+(?:px|%)?\s*)+)\}/.exec(next.value)
             if (size && next.type === 'text') {
-              for (const match of size[1].matchAll(/(width|height)=(\d+)/g)) {
+              for (const match of size[1].matchAll(/(width|height)=(\d+)(px|%)?/g)) {
                 const value = Number(match[2])
-                if (value > 0 && value <= 8192) {
-                  child.properties[match[1]] = value
+                if (value > 0 && value <= (match[3] === '%' ? 100 : 8192)) {
+                  child.properties[match[1]] = match[3] === '%' ? `${value}%` : value
                 }
               }
               next.value = next.value.slice(size[0].length)

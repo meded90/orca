@@ -2,7 +2,7 @@ import { addWslEnvKeys } from '../../wsl-env'
 import { extractExecError, parseRetryAfterMs } from '../exec-error'
 import { resolveCommand, resolveDefaultWslCli } from './wsl-command-resolution'
 import { isHostCommandMissing } from './github-cli-host-fallback'
-import { execFileCaptureToTermination } from './exec-file-capture'
+import { execFileCapture, execFileCaptureToTermination } from './exec-file-capture'
 import { logHostedCliDeadlineKill } from './hosted-cli-deadline-log'
 import type { GitExecOptions } from './git-exec-options'
 import { argsLookIdempotent } from './gh-idempotency'
@@ -54,10 +54,18 @@ export function redirectPortedHostnameToEnv(
   }
 }
 
+export function glabExecFileAsync(
+  args: string[],
+  options: GlabExecOptions & { encoding: 'buffer' }
+): Promise<{ stdout: Buffer; stderr: Buffer }>
+export function glabExecFileAsync(
+  args: string[],
+  options?: GlabExecOptions
+): Promise<{ stdout: string; stderr: string }>
 export async function glabExecFileAsync(
   args: string[],
   options: GlabExecOptions = {}
-): Promise<{ stdout: string; stderr: string }> {
+): Promise<{ stdout: string | Buffer; stderr: string | Buffer }> {
   ;({ args, options } = redirectPortedHostnameToEnv(args, options))
   let resolved = resolveCommand('glab', args, options.cwd, options.wslDistro)
   const timeoutMs = options.timeout ?? DEFAULT_GLAB_EXEC_TIMEOUT_MS
@@ -65,23 +73,36 @@ export async function glabExecFileAsync(
   let attemptedDefaultWslFallback = false
   for (let attempt = 0; attempt <= GH_RETRY_DELAYS_MS.length; attempt++) {
     try {
-      // Why to-termination: same shim chain as gh — the deadline has to reap the
-      // whole tree, not just the wrapper that spawned it (#18234).
-      const { stdout, stderr } = await execFileCaptureToTermination(
-        resolved.binary,
-        resolved.args,
-        {
-          cwd: resolved.cwd,
-          encoding: (options.encoding ?? 'utf-8') as BufferEncoding,
-          maxBuffer: options.maxBuffer,
-          timeout: timeoutMs,
-          env: options.env,
-          signal: options.signal,
-          onDeadlineKill: () => logHostedCliDeadlineKill('glab', resolved.binary, args, timeoutMs)
-        },
-        resolved.termination
-      )
-      return { stdout: stdout as string, stderr: stderr as string }
+      // Text commands retain the shim termination barrier (#18234). Binary downloads
+      // use the raw-byte capture with the same timeout, abort and process-tree cleanup.
+      const captureOptions: Parameters<typeof execFileCapture>[2] = {
+        cwd: resolved.cwd,
+        encoding: options.encoding ?? 'utf-8',
+        maxBuffer: options.maxBuffer,
+        timeout: timeoutMs,
+        env: options.env,
+        signal: options.signal,
+        onDeadlineKill: () => logHostedCliDeadlineKill('glab', resolved.binary, args, timeoutMs)
+      }
+      const { stdout, stderr } =
+        options.encoding === 'buffer'
+          ? await execFileCapture(resolved.binary, resolved.args, captureOptions)
+          : await execFileCaptureToTermination(
+              resolved.binary,
+              resolved.args,
+              captureOptions,
+              resolved.termination
+            )
+      if (options.encoding === 'buffer') {
+        if (!Buffer.isBuffer(stdout) || !Buffer.isBuffer(stderr)) {
+          throw new Error('glab binary capture returned decoded text')
+        }
+        return { stdout, stderr }
+      }
+      return {
+        stdout: typeof stdout === 'string' ? stdout : stdout.toString(options.encoding ?? 'utf-8'),
+        stderr: typeof stderr === 'string' ? stderr : stderr.toString(options.encoding ?? 'utf-8')
+      }
     } catch (err) {
       lastError = err
       const { stderr } = extractExecError(err)

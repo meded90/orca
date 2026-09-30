@@ -1,9 +1,8 @@
 import { marked } from 'marked'
+import { decodeHTMLAttribute } from 'entities'
 import { buildImageDataUri } from '../../shared/image-data-uri'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
-import { execFileCapture } from '../git/command-runner/exec-file-capture'
-import { redirectPortedHostnameToEnv } from '../git/command-runner/glab-exec-file'
-import { resolveCommand } from '../git/command-runner/wsl-command-resolution'
+import { glabExecFileAsync } from '../git/command-runner/glab-exec-file'
 import { glabRepoExecOptions, type LocalGitExecOptions, type ProjectRef } from './gl-utils'
 import { encodedProject } from './project-path-encoding'
 
@@ -65,7 +64,7 @@ export function collectGitLabImages(contents: readonly string[]): string[] {
             /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
           )) {
             if (attribute[1].toLowerCase() === 'src') {
-              urls.add(attribute[2] ?? attribute[3] ?? attribute[4] ?? '')
+              urls.add(decodeHTMLAttribute(attribute[2] ?? attribute[3] ?? attribute[4] ?? ''))
               break
             }
           }
@@ -127,15 +126,8 @@ export async function loadGitLabImages(
       return
     }
     try {
-      const { args, options } = redirectPortedHostnameToEnv(
-        ['api', '--hostname', project.host, path],
-        glabRepoExecOptions(repoPath, connectionId, localGitOptions)
-      )
-      const command = resolveCommand('glab', args, options.cwd, options.wslDistro)
-      // Binary capture is essential: the normal glab runner decodes stdout as UTF-8.
-      const { stdout } = await execFileCapture(command.binary, command.args, {
-        cwd: command.cwd,
-        env: options.env,
+      const { stdout } = await glabExecFileAsync(['api', '--hostname', project.host, path], {
+        ...glabRepoExecOptions(repoPath, connectionId, localGitOptions),
         encoding: 'buffer',
         maxBuffer: MAX_IMAGE_BYTES,
         timeout: 15_000,

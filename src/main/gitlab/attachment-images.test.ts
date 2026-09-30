@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { capture } = vi.hoisted(() => ({ capture: vi.fn() }))
-vi.mock('../git/command-runner/exec-file-capture', () => ({ execFileCapture: capture }))
-vi.mock('../git/command-runner/wsl-command-resolution', () => ({
-  resolveCommand: (binary: string, args: string[], cwd?: string) => ({ binary, args, cwd })
-}))
+vi.mock('../git/command-runner/glab-exec-file', () => ({ glabExecFileAsync: capture }))
 import { collectGitLabImages, gitLabUploadPath, loadGitLabImages } from './attachment-images'
 const project = { host: 'gitlab.example.com', path: 'group/project' }
 const src = '/uploads/0123456789abcdef0123456789abcdef/screen.png'
@@ -52,7 +49,6 @@ describe('GitLab attachment images', () => {
     expect(result[full]).toBe(result[src])
     expect(capture).toHaveBeenCalledTimes(1)
     expect(capture).toHaveBeenCalledWith(
-      'glab',
       ['api', '--hostname', project.host, `projects/group%2Fproject${src}`],
       expect.objectContaining({ cwd: '/repo', encoding: 'buffer', timeout: 15000 })
     )
@@ -87,11 +83,7 @@ describe('GitLab attachment budgets and host routing', () => {
   it('keeps remote repository paths off the local API process', async () => {
     capture.mockResolvedValue({ stdout: png })
     await loadGitLabImages([`![a](${src})`], '/remote-only/repo', project, 'ssh-connection')
-    expect(capture).toHaveBeenCalledWith(
-      'glab',
-      expect.any(Array),
-      expect.objectContaining({ cwd: undefined })
-    )
+    expect(capture.mock.calls[0]?.[1].cwd).toBeUndefined()
   })
 
   it('uses the ported GitLab host through the existing environment mapping', async () => {
@@ -101,10 +93,9 @@ describe('GitLab attachment budgets and host routing', () => {
       host: 'gitlab.example.com:8443'
     })
     expect(capture).toHaveBeenCalledWith(
-      'glab',
-      ['api', `projects/group%2Fproject${src}`],
+      ['api', '--hostname', 'gitlab.example.com:8443', `projects/group%2Fproject${src}`],
       expect.objectContaining({
-        env: expect.objectContaining({ GITLAB_HOST: 'gitlab.example.com:8443' })
+        encoding: 'buffer'
       })
     )
   })
@@ -167,3 +158,23 @@ describe('HTML image syntax and serialized budgets', () => {
     expect(Buffer.byteLength(JSON.stringify(result)) - 2).toBeLessThanOrEqual(budget)
   })
 })
+
+it.each(['a&amp;b.png', 'a&#38;b.png', 'a&#x26;b.png'])(
+  'decodes HTML attribute entities in %s',
+  async (filename) => {
+    capture.mockReset().mockResolvedValue({ stdout: png, stderr: Buffer.alloc(0) })
+    const path = src.replace('screen.png', filename)
+    const decoded = src.replace('screen.png', 'a&b.png')
+    const result = await loadGitLabImages([`<img src="${path}">`], '/repo', project)
+    expect(result[decoded]).toContain('data:image/png;base64,')
+    expect(capture).toHaveBeenCalledWith(
+      [
+        'api',
+        '--hostname',
+        project.host,
+        `projects/group%2Fproject${src.replace('screen.png', 'a%26b.png')}`
+      ],
+      expect.objectContaining({ encoding: 'buffer' })
+    )
+  }
+)
