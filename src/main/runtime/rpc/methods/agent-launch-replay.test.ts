@@ -24,8 +24,12 @@ import {
   settleAgentSessionOperation,
   type AgentSessionOperationRow
 } from '../../../../shared/agent-session-operation-ledger'
-import { AgentSessionRecordStore } from '../../agent-session-record-store'
-import { agentSessionStorePath } from '../../agent-session-record-store-file'
+import type { AgentSessionRecordStore } from '../../agent-session-record-store'
+import {
+  openTestAgentSessionRecordStore,
+  readPersistedTestAgentSessionStore,
+  testAgentSessionStoreFilePath
+} from '../../agent-session-record-store-test-harness'
 import { setStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-host'
 import type { RpcContext } from '../core'
@@ -120,7 +124,7 @@ beforeEach(async () => {
   attachCallerKeys.length = 0
   createStructuredSession.mockClear()
   directory = await mkdtemp(join(tmpdir(), 'orca-agent-launch-replay-'))
-  store = await AgentSessionRecordStore.open({ directory, hostId: 'local' })
+  store = await openTestAgentSessionRecordStore(directory)
   // The launch reaches the ledger through the installed host; nothing else on the host is used,
   // because the structured create below it is mocked out.
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `deps.store` is the only member `agent.launch` reads, and a member it omits throws on call.
@@ -241,7 +245,7 @@ describe('a replay answers from the record', () => {
     const params = createLaunch({ operationId: OPERATION_ID })
     const first = await launch(params, runtime)
 
-    const reopened = await AgentSessionRecordStore.open({ directory, hostId: 'local' })
+    const reopened = await openTestAgentSessionRecordStore(directory)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: see the setup above.
     setStructuredAgentSessionHost({
       deps: { store: reopened }
@@ -339,7 +343,7 @@ describe('an uncertain launch stays uncertain', () => {
 
   it('records a failure that happened before anything could be created', async () => {
     const runtime = runtimeStub()
-    runtime.showManagedTerminalWorkspace.mockRejectedValueOnce(new Error('worktree_not_found'))
+    runtime.showTerminalWorkspaceLaunchScope.mockRejectedValueOnce(new Error('worktree_not_found'))
 
     await expect(
       launch(
@@ -411,9 +415,8 @@ describe('the recorded row stays readable by a build that predates it', () => {
       runtimeStub({ createSupport: { supported: false, reason: 'agent' } })
     )
 
-    const file: { operations: Record<string, { outcome: Record<string, unknown> }> } = JSON.parse(
-      await readFile(agentSessionStorePath(directory), 'utf-8')
-    )
+    const file: { operations: Record<string, { outcome: Record<string, unknown> }> } =
+      await readPersistedTestAgentSessionStore(directory)
     const outcome = Object.values(file.operations)[0].outcome
 
     // The ratchet, and the reason this is not a new status arm or an optional `sessionId`: a build
@@ -431,7 +434,7 @@ describe('an unreadable launch payload costs one replay, never the store', () =>
   /** The whole file, primary and backup: `loadAgentSessionStore` falls through to the backup, and
    *  the backup is a copy of the validated primary, so both carry the same payload in real life. */
   async function rewriteRecordedLaunch(payload: unknown): Promise<void> {
-    const path = agentSessionStorePath(directory)
+    const path = testAgentSessionStoreFilePath(directory)
     const file: { operations: Record<string, { outcome: Record<string, unknown> }> } = JSON.parse(
       await readFile(path, 'utf-8')
     )
@@ -465,7 +468,7 @@ describe('an unreadable launch payload costs one replay, never the store', () =>
     await launch(params, runtime)
     await rewriteRecordedLaunch({ outcome: { kind: 'structured' }, worktreeId: 'wt-1' })
 
-    const reopened = await AgentSessionRecordStore.open({ directory, hostId: 'local' })
+    const reopened = await openTestAgentSessionRecordStore(directory)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: see the setup above.
     setStructuredAgentSessionHost({
       deps: { store: reopened }
@@ -481,7 +484,7 @@ describe('an unreadable launch payload costs one replay, never the store', () =>
 describe('a recorded failure replays as the failure it was', () => {
   it('answers with the code the launch actually raised, not the ledger vocabulary', async () => {
     const runtime = runtimeStub()
-    runtime.showManagedTerminalWorkspace.mockRejectedValue(new Error('worktree_not_found'))
+    runtime.showTerminalWorkspaceLaunchScope.mockRejectedValue(new Error('worktree_not_found'))
     const params = createLaunch({
       operationId: OPERATION_ID,
       target: { kind: 'existing', worktree: 'gone' }
@@ -493,14 +496,14 @@ describe('a recorded failure replays as the failure it was', () => {
     // malformed" signal, which tells a client to mint a fresh id when the truthful answer is that
     // this launch definitively did not run.
     const replayed = runtimeStub()
-    replayed.showManagedTerminalWorkspace.mockRejectedValue(new Error('worktree_not_found'))
+    replayed.showTerminalWorkspaceLaunchScope.mockRejectedValue(new Error('worktree_not_found'))
     await expect(launch(params, replayed)).rejects.toThrow('worktree_not_found')
-    expect(replayed.showManagedTerminalWorkspace).not.toHaveBeenCalled()
+    expect(replayed.showTerminalWorkspaceLaunchScope).not.toHaveBeenCalled()
   })
 
   it('bounds the code it persists, because a code is an identifier and a message is not', async () => {
     const runtime = runtimeStub()
-    runtime.showManagedTerminalWorkspace.mockRejectedValue(
+    runtime.showTerminalWorkspaceLaunchScope.mockRejectedValue(
       new Error(`ENOENT: no such file or directory, stat '${'/very/long/path'.repeat(400)}'`)
     )
 
@@ -585,7 +588,8 @@ describe('the inner attach reserves under its own id', () => {
     })
     expect(forwarded).toEqual({
       decision: 'refused',
-      code: 'agent_session_operation_conflict'
+      code: 'agent_session_operation_conflict',
+      details: { reason: 'operationIdReused' }
     })
 
     const derived = deriveAgentLaunchChildOperationId(OPERATION_ID)
