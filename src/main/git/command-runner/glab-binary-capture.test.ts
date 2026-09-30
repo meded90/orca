@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { binaryCapture, textCapture, resolve, fallback } = vi.hoisted(() => ({
+const { binaryCapture, resolve, fallback } = vi.hoisted(() => ({
   binaryCapture: vi.fn(),
-  textCapture: vi.fn(),
   resolve: vi.fn(),
   fallback: vi.fn()
 }))
 vi.mock('./exec-file-capture', () => ({
-  execFileCapture: binaryCapture,
-  execFileCaptureToTermination: textCapture
+  execFileCaptureToTermination: binaryCapture
 }))
 vi.mock('./wsl-command-resolution', () => ({
   resolveCommand: resolve,
@@ -37,14 +35,14 @@ afterEach(() => {
 })
 
 describe('glab binary downloads', () => {
-  it('preserves non-UTF-8 bytes instead of using the text transport', async () => {
+  it('preserves non-UTF-8 bytes through the termination barrier', async () => {
     const reply = await glabExecFileAsync(['api', 'upload'], { encoding: 'buffer' })
     expect(reply.stdout).toEqual(bytes)
-    expect(textCapture).not.toHaveBeenCalled()
     expect(binaryCapture).toHaveBeenCalledWith(
       'glab',
       ['api', 'upload'],
-      expect.objectContaining({ encoding: 'buffer' })
+      expect.objectContaining({ encoding: 'buffer' }),
+      undefined
     )
   })
   it('uses default WSL for cwd-less downloads when host glab is missing', async () => {
@@ -60,7 +58,8 @@ describe('glab binary downloads', () => {
     expect(binaryCapture).toHaveBeenLastCalledWith(
       'wsl.exe',
       expect.any(Array),
-      expect.objectContaining({ signal, timeout: 15_000, encoding: 'buffer' })
+      expect.objectContaining({ signal, timeout: 15_000, encoding: 'buffer' }),
+      undefined
     )
   })
   it('keeps a local repository failure local rather than changing execution host', async () => {

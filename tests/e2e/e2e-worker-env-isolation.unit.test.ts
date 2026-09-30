@@ -33,7 +33,16 @@ const MODULE_SCOPE_ENV_WRITE =
 const MODULE_SCOPE_ENV_WRITER_PIN = 0
 
 const SCANNED_EXTENSIONS = ['.ts', '.tsx']
-const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist', 'out', 'build', '__fixtures__'])
+// Cross-version tests materialize whole release source trees here; those are fixtures,
+// not Playwright specs imported into an e2e worker.
+const IGNORED_DIRECTORIES = new Set([
+  'node_modules',
+  'dist',
+  'out',
+  'build',
+  '__fixtures__',
+  '.cross-version-checkouts'
+])
 
 function collectE2eFiles(root: string): string[] {
   const found: string[] = []

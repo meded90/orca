@@ -2,7 +2,7 @@ import { addWslEnvKeys } from '../../wsl-env'
 import { extractExecError, parseRetryAfterMs } from '../exec-error'
 import { resolveCommand, resolveDefaultWslCli } from './wsl-command-resolution'
 import { isHostCommandMissing } from './github-cli-host-fallback'
-import { execFileCapture, execFileCaptureToTermination } from './exec-file-capture'
+import { execFileCaptureToTermination } from './exec-file-capture'
 import { logHostedCliDeadlineKill } from './hosted-cli-deadline-log'
 import type { GitExecOptions } from './git-exec-options'
 import { argsLookIdempotent } from './gh-idempotency'
@@ -73,9 +73,8 @@ export async function glabExecFileAsync(
   let attemptedDefaultWslFallback = false
   for (let attempt = 0; attempt <= GH_RETRY_DELAYS_MS.length; attempt++) {
     try {
-      // Text commands retain the shim termination barrier (#18234). Binary downloads
-      // use the raw-byte capture with the same timeout, abort and process-tree cleanup.
-      const captureOptions: Parameters<typeof execFileCapture>[2] = {
+      // Both text and binary commands retain the shim termination barrier (#18234).
+      const captureOptions: Parameters<typeof execFileCaptureToTermination>[2] = {
         cwd: resolved.cwd,
         encoding: options.encoding ?? 'utf-8',
         maxBuffer: options.maxBuffer,
@@ -84,15 +83,12 @@ export async function glabExecFileAsync(
         signal: options.signal,
         onDeadlineKill: () => logHostedCliDeadlineKill('glab', resolved.binary, args, timeoutMs)
       }
-      const { stdout, stderr } =
-        options.encoding === 'buffer'
-          ? await execFileCapture(resolved.binary, resolved.args, captureOptions)
-          : await execFileCaptureToTermination(
-              resolved.binary,
-              resolved.args,
-              captureOptions,
-              resolved.termination
-            )
+      const { stdout, stderr } = await execFileCaptureToTermination(
+        resolved.binary,
+        resolved.args,
+        captureOptions,
+        resolved.termination
+      )
       if (options.encoding === 'buffer') {
         if (!Buffer.isBuffer(stdout) || !Buffer.isBuffer(stderr)) {
           throw new Error('glab binary capture returned decoded text')
