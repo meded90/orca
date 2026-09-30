@@ -23,15 +23,8 @@ const E2E_ROOT = resolve(__dirname)
 const MODULE_SCOPE_ENV_WRITE =
   /^(?:process\.env\.[A-Za-z_][A-Za-z0-9_]*\s*(?:\??\|\||\?\?|)=[^=]|process\.env\[|delete\s+process\.env[.[]|Object\.assign\(\s*process\.env)/
 
-/**
- * The count of files writing `process.env` at module scope.
- *
- * May only ever be DECREASED. Raising it is never the fix: the replacement is a fixture option,
- * which is strictly more capable here because it reaches the app launch without touching the
- * worker every other spec shares.
- */
-const MODULE_SCOPE_ENV_WRITER_PIN = 0
-
+// No file may write at module scope. The replacement is a fixture option, which reaches the app
+// launch without touching the worker every other spec shares.
 const SCANNED_EXTENSIONS = ['.ts', '.tsx']
 // Cross-version tests materialize whole release source trees here; those are fixtures,
 // not Playwright specs imported into an e2e worker.
@@ -75,11 +68,6 @@ describe('e2e worker env isolation', () => {
 
   it('no e2e file writes process.env at module scope', () => {
     expect(offenders).toEqual([])
-  })
-
-  it('holds the module-scope env writer count at its ratchet', () => {
-    const files = new Set(offenders.map((offender) => offender.split(':')[0]))
-    expect(files.size).toBeLessThanOrEqual(MODULE_SCOPE_ENV_WRITER_PIN)
   })
 
   it('detects the shape it is meant to catch', () => {
