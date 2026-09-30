@@ -9,7 +9,7 @@ import {
   isGitHubUserAttachmentVideoLink
 } from './comment-markdown-github-attachment-media'
 import { ExpandableMarkdownImage } from './MarkdownImageLightbox'
-import { markdownImageSize } from './markdown-image-size'
+import { MarkdownSizedImage } from './markdown-image-size'
 
 export type CommentMarkdownLinkClickHandler = (
   event: React.MouseEvent<HTMLElement>,
@@ -324,9 +324,10 @@ export function createDocumentCommentMarkdownComponents(
           'cursor-pointer'
         ].join(' ')
         return (
-          <img
+          <MarkdownSizedImage
             src={src}
-            {...markdownImageSize(width, height)}
+            width={width}
+            height={height}
             alt={alt ?? ''}
             className={imageClassName}
             onClick={(e) => handleMarkdownImageClick(e, src, onLinkClick)}

@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
-import { markdownImageSize } from './markdown-image-size'
+import { markdownImageSize, MarkdownSizedImage } from './markdown-image-size'
 
 type ExpandableMarkdownImageProps = {
   src: string
@@ -59,14 +59,10 @@ export function ExpandableMarkdownImage({
             'Expand image'
           )}
         >
-          <img
+          <MarkdownSizedImage
             src={src}
-            width={size.width}
-            height={size.height}
-            style={{
-              width: size.style.width ? '100%' : undefined,
-              height: size.style.height ? '100%' : undefined
-            }}
+            width={size.style.width ? '100%' : size.width}
+            height={height}
             alt={alt ?? ''}
             className={cn(className, 'pointer-events-none')}
           />
