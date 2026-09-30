@@ -120,7 +120,10 @@ export async function loadGitLabImages(
   }
   const sources: Record<string, string> = {}
   let total = 0
-  const signal = AbortSignal.timeout(15_000)
+  const deadline = AbortSignal.timeout(15_000)
+  const signal = localGitOptions.signal
+    ? AbortSignal.any([localGitOptions.signal, deadline])
+    : deadline
   await mapWithConcurrency([...paths], 3, async ([path, aliases]) => {
     if (signal.aborted || total >= budget) {
       return

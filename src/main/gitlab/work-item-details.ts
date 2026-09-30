@@ -31,6 +31,7 @@ import {
 export type GitLabDetailPreviewOptions = {
   includeImages?: boolean
   maxReplyBytes?: number
+  signal?: AbortSignal
 }
 
 // ── Top-level aggregator ───────────────────────────────────────────
@@ -83,12 +84,16 @@ export async function getWorkItemDetails(
   if (!projectRef) {
     return null
   }
-  await acquire()
+  previewOptions.signal?.throwIfAborted()
+  await acquire(undefined, previewOptions.signal)
+  const executionOptions = previewOptions.signal
+    ? { ...localGitOptions, signal: previewOptions.signal }
+    : localGitOptions
   try {
     const details =
       type === 'issue'
-        ? await fetchIssueDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
-        : await fetchMRDetails(repoPath, projectRef, iid, connectionId, localGitOptions)
+        ? await fetchIssueDetails(repoPath, projectRef, iid, connectionId, executionOptions)
+        : await fetchMRDetails(repoPath, projectRef, iid, connectionId, executionOptions)
     if (!details || !previewOptions.includeImages) {
       return details
     }
@@ -105,7 +110,7 @@ export async function getWorkItemDetails(
       repoPath,
       projectRef,
       connectionId,
-      localGitOptions,
+      executionOptions,
       imageBudget
     ).catch((error) => {
       console.warn('[gitlab] Attachment previews unavailable:', error)

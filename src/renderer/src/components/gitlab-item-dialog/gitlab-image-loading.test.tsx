@@ -16,6 +16,7 @@ const item: GitLabWorkItem = {
   author: null,
   repoId: 'repo'
 }
+const cancelWorkItemDetails = vi.fn().mockResolvedValue(undefined)
 const originalApi = Object.getOwnPropertyDescriptor(window, 'api')
 const selector = { repoPath: '/repo' }
 const details: GitLabWorkItemDetails = {
@@ -25,6 +26,7 @@ const details: GitLabWorkItemDetails = {
 }
 afterEach(() => {
   cleanup()
+  cancelWorkItemDetails.mockClear()
   if (originalApi) {
     Object.defineProperty(window, 'api', originalApi)
   } else {
@@ -44,7 +46,7 @@ it('shows text before previews and ignores an old preview after switching items'
     .mockResolvedValueOnce({ ...details, body: 'New item without images' })
   Object.defineProperty(window, 'api', {
     configurable: true,
-    value: { gl: { workItemDetails: fetch } }
+    value: { gl: { workItemDetails: fetch, cancelWorkItemDetails } }
   })
   const { result, rerender } = renderHook(
     ({ target }) => {
@@ -60,9 +62,12 @@ it('shows text before previews and ignores an old preview after switching items'
     ...selector,
     iid: 1,
     type: 'issue',
-    includeImages: true
+    includeImages: true,
+    requestToken: expect.any(String)
   })
+  const requestToken = fetch.mock.calls[1][0].requestToken
   rerender({ target: { ...item, id: 'two', number: 2 } })
+  expect(cancelWorkItemDetails).toHaveBeenCalledWith({ requestToken })
   await waitFor(() => expect(result.current.details?.body).toBe('New item without images'))
   await act(async () => finish({ ...details, imageSources: { old: 'data:image/png;base64,abc' } }))
   expect(result.current.details?.imageSources).toBeUndefined()
@@ -79,7 +84,7 @@ it.each([false, true])('keeps text when previews settle (failure=%s)', async (fa
   }
   Object.defineProperty(window, 'api', {
     configurable: true,
-    value: { gl: { workItemDetails: fetch } }
+    value: { gl: { workItemDetails: fetch, cancelWorkItemDetails } }
   })
   const { result } = renderHook(() => {
     const state = useGitLabItemDialogState(item.id)

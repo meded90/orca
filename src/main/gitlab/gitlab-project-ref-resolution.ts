@@ -258,10 +258,12 @@ export function glabRepoExecOptions(
   repoPath: string,
   connectionId?: string | null,
   localGitOptions: LocalGitExecOptions = {}
-): { cwd?: string; wslDistro?: string; admissionTier?: GitAdmissionTier } {
+): { cwd?: string; wslDistro?: string; admissionTier?: GitAdmissionTier; signal?: AbortSignal } {
+  const cancellation = localGitOptions.signal ? { signal: localGitOptions.signal } : {}
   return connectionId
-    ? {}
+    ? cancellation
     : {
+        ...cancellation,
         cwd: repoPath,
         ...(localGitOptions.wslDistro ? { wslDistro: localGitOptions.wslDistro } : {}),
         ...(localGitOptions.admissionTier ? { admissionTier: localGitOptions.admissionTier } : {})

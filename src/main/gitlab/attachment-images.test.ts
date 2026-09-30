@@ -178,3 +178,32 @@ it.each(['a&amp;b.png', 'a&#38;b.png', 'a&#x26;b.png'])(
     )
   }
 )
+
+it.each([null, 'ssh-connection'])(
+  'cancels active previews and does not start queued images (%s)',
+  async (connectionId) => {
+    capture.mockReset()
+    const controller = new AbortController()
+    const signals: AbortSignal[] = []
+    capture.mockImplementation((_args, options: { signal: AbortSignal }) => {
+      signals.push(options.signal)
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+          once: true
+        })
+      })
+    })
+    const images = Array.from(
+      { length: 8 },
+      (_, index) => `![image](${src.replace('screen.png', `${index}.png`)})`
+    ).join('\n')
+    const loading = loadGitLabImages([images], '/repo', project, connectionId, {
+      signal: controller.signal
+    })
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(3))
+    controller.abort()
+    expect(await loading).toEqual({})
+    expect(signals.every((signal) => signal.aborted)).toBe(true)
+    expect(capture).toHaveBeenCalledTimes(3)
+  }
+)

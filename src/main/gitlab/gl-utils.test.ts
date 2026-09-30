@@ -698,3 +698,26 @@ describe('parseGlabPaginationHeader', () => {
     expect(parseGlabPaginationHeader('-3', 0)).toBeUndefined()
   })
 })
+
+it('removes a cancelled GitLab waiter without consuming a slot', async () => {
+  await Promise.all([acquire(), acquire(), acquire(), acquire()])
+  const controller = new AbortController()
+  const cancelled = acquire(undefined, controller.signal)
+  const rejection = expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejection
+  const next = acquire()
+  release()
+  await next
+  for (let index = 0; index < 4; index++) {
+    release()
+  }
+  await acquire()
+  release()
+})
+
+it('refuses an already-aborted GitLab operation before admission', async () => {
+  await expect(acquire(undefined, AbortSignal.abort())).rejects.toMatchObject({
+    name: 'AbortError'
+  })
+})

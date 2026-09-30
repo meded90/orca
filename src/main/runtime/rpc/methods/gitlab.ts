@@ -178,14 +178,14 @@ export const GITLAB_METHODS = [
   defineMethod({
     name: 'gitlab.workItemDetails',
     params: WorkItemDetails,
-    handler: async (params, { runtime, clientKind, requestId }) => {
+    handler: async (params, { runtime, clientKind, requestId, signal }) => {
       const maxReplyBytes = clientKind ? remoteRpcContentBudget(requestId ?? '') : undefined
       const details = await runtime.getGitLabRepoWorkItemDetails(
         params.repo,
         params.iid,
         params.type,
         params.projectRef,
-        { includeImages: params.includeImages, maxReplyBytes }
+        { includeImages: params.includeImages, maxReplyBytes, ...(signal ? { signal } : {}) }
       )
       if (
         maxReplyBytes !== undefined &&

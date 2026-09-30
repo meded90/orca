@@ -8,6 +8,7 @@ import type { GitAdmissionTier } from '../git/command-runner/git-exec-options'
 export type LocalGitExecOptions = {
   wslDistro?: string
   admissionTier?: GitAdmissionTier
+  signal?: AbortSignal
 }
 
 const GLAB_KNOWN_HOSTS_TIMEOUT_MS = 10_000

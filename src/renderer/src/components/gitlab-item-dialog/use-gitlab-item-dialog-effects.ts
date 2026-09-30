@@ -1,5 +1,6 @@
 /* oxlint-disable react-doctor/no-adjust-state-on-prop-change -- Why: GitLab item dialogs reset draft/provider state and hydrate details from GitLab IPC when the selected item identity changes. */
 import { useEffect } from 'react'
+import { createBrowserUuid } from '../../lib/browser-uuid'
 import type { GitLabWorkItem } from '../../../../shared/gitlab-types'
 import type { GitLabDialogRepoSelector } from './gitlab-item-dialog-types'
 import type { GitLabItemDialogState } from './use-gitlab-item-dialog-state'
@@ -20,10 +21,11 @@ export function useGitLabItemDetailsEffect(
       return
     }
     let stale = false
+    const requestToken = createBrowserUuid()
     setLoading(true)
     setError(null)
     void window.api.gl
-      .workItemDetails({ ...repoSelector, iid: item.number, type: item.type })
+      .workItemDetails({ ...repoSelector, iid: item.number, type: item.type, requestToken })
       .then((data) => {
         if (stale) {
           return
@@ -46,7 +48,8 @@ export function useGitLabItemDetailsEffect(
             ...repoSelector,
             iid: item.number,
             type: item.type,
-            includeImages: true
+            includeImages: true,
+            requestToken
           })
           .then((preview) => {
             if (!stale && preview?.imageSources) {
@@ -69,6 +72,7 @@ export function useGitLabItemDetailsEffect(
       })
     return () => {
       stale = true
+      void window.api.gl.cancelWorkItemDetails({ requestToken }).catch(() => {})
     }
   }, [item, refreshNonce, repoSelector, setDetails, setEditingDetails, setError, setLoading])
 }

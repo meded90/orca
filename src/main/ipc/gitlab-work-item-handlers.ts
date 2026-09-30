@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { createSenderScopedRequestCancellations } from './sender-scoped-request-cancellation'
 import type { TaskSourceContext } from '../../shared/task-source-context'
 import type { Store } from '../persistence'
 import {
@@ -15,6 +16,10 @@ import { assertRegisteredRepo, localGitOptionArgs, repoConnectionId } from './gi
 
 /** Route item requests through the selected repository execution options. */
 export function registerGitLabWorkItemHandlers(store: Store): void {
+  const detailCancellations = createSenderScopedRequestCancellations()
+  ipcMain.handle('gitlab:cancelWorkItemDetails', (event, args: { requestToken: string }) =>
+    detailCancellations.cancel(event, args.requestToken)
+  )
   // Why: combined MR + issue list — Tasks screen and any future picker
   // that wants a unified view. Centralizes the merge / sort logic so
   // callers don't have to re-implement it.
@@ -51,20 +56,33 @@ export function registerGitLabWorkItemHandlers(store: Store): void {
   ipcMain.handle(
     'gitlab:workItemDetails',
     async (
-      _event,
-      args: GitLabRepoSelectorArgs & { iid: number; type: 'issue' | 'mr'; includeImages?: boolean }
+      event,
+      args: GitLabRepoSelectorArgs & {
+        iid: number
+        type: 'issue' | 'mr'
+        includeImages?: boolean
+        requestToken?: string
+      }
     ) => {
       const repo = assertRegisteredRepo(args, store)
-      return getWorkItemDetails(
-        repo.path,
-        args.iid,
-        args.type,
-        repo.issueSourcePreference,
-        repoConnectionId(repo),
-        undefined,
-        localGitOptionArgs(store, repo)[0] ?? {},
-        { includeImages: args.includeImages }
-      )
+      const controller = detailCancellations.begin(event, args.requestToken)
+      try {
+        return await getWorkItemDetails(
+          repo.path,
+          args.iid,
+          args.type,
+          repo.issueSourcePreference,
+          repoConnectionId(repo),
+          undefined,
+          localGitOptionArgs(store, repo)[0] ?? {},
+          {
+            includeImages: args.includeImages,
+            ...(controller ? { signal: controller.signal } : {})
+          }
+        )
+      } finally {
+        detailCancellations.finish(event, args.requestToken, controller)
+      }
     }
   )
 
