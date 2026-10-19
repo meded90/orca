@@ -1,6 +1,6 @@
-import { getCellWidth, getTotalScale } from './viewport-metrics'
 import { repositionOverlay } from './selection-overlay'
 import { computeFitScale, flog, updateTransform } from './viewport-transform'
+import { getCellWidth, getTotalScale } from './cell-metrics'
 import type { TerminalDocumentScope } from './document-scope'
 import type { TerminalViewportChange } from './document-host-seams'
 import { scheduleDocumentFrame } from './document-frame-registry'

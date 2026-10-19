@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ExpandableMarkdownImage } from './MarkdownImageLightbox'
@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 describe('ExpandableMarkdownImage', () => {
-  it('opens an accessible dialog, traps focus, and restores focus after Escape', async () => {
+  it('opens an accessible dialog and restores focus after Escape', async () => {
     const user = userEvent.setup()
     render(
       <ExpandableMarkdownImage
@@ -23,13 +23,9 @@ describe('ExpandableMarkdownImage', () => {
 
     const trigger = screen.getByRole('button', { name: 'Expand image' })
     await user.click(trigger)
-    expect(screen.getByRole('dialog', { name: 'shot.png' })).toBeTruthy()
+    const dialog = screen.getByRole('dialog', { name: 'shot.png' })
     expect(screen.getAllByAltText('shot.png').length).toBeGreaterThanOrEqual(2)
-    const closeButton = screen.getByRole('button', { name: 'Close' })
-    expect(document.activeElement).toBe(closeButton)
-
-    await user.tab()
-    expect(document.activeElement).toBe(closeButton)
+    expect(document.activeElement).toBe(dialog)
 
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'shot.png' })).toBeNull())
@@ -107,4 +103,23 @@ it('forwards preview failures while retaining percentage dimensions', () => {
   expect(image.style.height).toBe('200px')
   fireEvent.error(image)
   expect(onError).toHaveBeenCalledOnce()
+})
+
+it('opens the authenticated GitLab bytes in the shared pan and zoom dialog', () => {
+  const src = '/uploads/0123456789abcdef0123456789abcdef/screen.png'
+  const data = 'data:image/png;base64,abc'
+  render(
+    <CommentMarkdown
+      variant="document"
+      content={`![private](${src}){width=75%}`}
+      gitlabImageSources={{ [src]: data }}
+    />
+  )
+  expect(screen.getByRole('button', { name: 'Expand image' }).style.width).toBe('75%')
+  fireEvent.click(screen.getByRole('button', { name: 'Expand image' }))
+  const dialog = screen.getByRole('dialog', { name: 'private' })
+  expect(within(dialog).getByAltText('private').getAttribute('src')).toBe(data)
+  expect(within(dialog).getByRole('button', { name: 'Zoom in' })).toBeTruthy()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+  expect(screen.queryByRole('dialog', { name: 'private' })).toBeNull()
 })

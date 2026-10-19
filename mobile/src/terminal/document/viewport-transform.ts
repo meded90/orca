@@ -1,7 +1,7 @@
-import { getCellWidth, getTotalScale } from './viewport-metrics'
 import { repositionOverlay } from './selection-overlay'
 import { shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
 import type { TerminalDocumentScope } from './document-scope'
+import { getCellWidth, getTotalScale } from './cell-metrics'
 
 // Why: after init() the initial scrollback applyFitScale may have run
 // against an empty buffer (or one without the widest line yet). Re-fit

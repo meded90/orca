@@ -1,4 +1,4 @@
-import { getCellHeight, getTotalScale } from './viewport-metrics'
+import { getCellHeight, getTotalScale } from './cell-metrics'
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
 import { touchesInRoot } from './document-host-seams'

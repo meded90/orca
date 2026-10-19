@@ -28,15 +28,6 @@ import type { ConnectionState, HostProfile } from './types'
 import type { RpcClientContextValue } from './rpc-client-context-contract'
 import { RpcClientContext as Ctx } from './rpc-client-react-context'
 
-export {
-  useDisconnectHostClient,
-  useForceReconnect,
-  useForgetHostClient,
-  useHostClient,
-  usePrimeHosts,
-  useRefreshHostClient
-} from './host-client-hooks'
-
 type StoreEntry = HostClientStoreEntry
 
 export { useRpcClientContext } from './rpc-client-react-context'

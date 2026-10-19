@@ -1,7 +1,5 @@
-import { getCellHeight, getTotalScale } from './viewport-metrics'
-
+import { getCellHeight, getTotalScale } from './cell-metrics'
 import { routeScrollLines, shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
-
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
 import {
   enqueueNormalBufferScrollDelta,

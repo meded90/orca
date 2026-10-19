@@ -1,4 +1,4 @@
-import { getCellHeight, getCellWidth } from './viewport-metrics'
+import { getCellHeight, getCellWidth } from './cell-metrics'
 import { elementInRoot } from './document-host-seams'
 import { TERMINAL_TEXT_SCALES } from '../terminal-text-scales'
 import type { TerminalDocumentScope } from './document-scope'
