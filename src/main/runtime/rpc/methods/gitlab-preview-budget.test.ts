@@ -19,12 +19,19 @@ it.each(['mobile', 'runtime'] as const)(
       id: '\u0001'.repeat(8192),
       authToken: 'tok',
       method: 'gitlab.workItemDetails',
-      params: { repo: 'id:repo', iid: 1, type: 'issue', includeImages: true }
+      params: {
+        repo: 'id:repo',
+        iid: 1,
+        type: 'issue',
+        includeImages: true,
+        includeReviewDetails: false
+      }
     }
     const replies: string[] = []
     await dispatcher.dispatchStreaming(request, (reply) => replies.push(reply), { clientKind })
     expect(getDetails).toHaveBeenCalledWith('id:repo', 1, 'issue', undefined, {
       includeImages: true,
+      includeReviewDetails: false,
       maxReplyBytes: remoteRpcContentBudget(request.id)
     })
     expect(JSON.parse(replies[0])).toMatchObject({ ok: true, result: { body: 'Details' } })

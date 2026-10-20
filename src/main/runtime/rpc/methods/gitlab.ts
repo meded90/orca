@@ -211,7 +211,12 @@ export const GITLAB_METHODS = [
         params.iid,
         params.type,
         params.projectRef,
-        { includeImages: params.includeImages, maxReplyBytes, ...(signal ? { signal } : {}) }
+        {
+          includeReviewDetails: params.includeReviewDetails,
+          includeImages: params.includeImages,
+          maxReplyBytes,
+          ...(signal ? { signal } : {})
+        }
       )
       if (
         maxReplyBytes !== undefined &&

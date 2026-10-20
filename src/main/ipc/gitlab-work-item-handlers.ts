@@ -60,6 +60,7 @@ export function registerGitLabWorkItemHandlers(store: Store): void {
       args: GitLabRepoSelectorArgs & {
         iid: number
         type: 'issue' | 'mr'
+        includeReviewDetails?: boolean
         includeImages?: boolean
         requestToken?: string
       }
@@ -76,6 +77,7 @@ export function registerGitLabWorkItemHandlers(store: Store): void {
           undefined,
           localGitOptionArgs(store, repo)[0] ?? {},
           {
+            includeReviewDetails: args.includeReviewDetails,
             includeImages: args.includeImages,
             ...(controller ? { signal: controller.signal } : {})
           }

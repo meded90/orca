@@ -91,6 +91,7 @@ export const glApi = {
       type: 'issue' | 'mr'
       includeImages?: boolean
       requestToken?: string
+      includeReviewDetails?: boolean
     }
   ) => ipcRenderer.invoke('gitlab:workItemDetails', args),
 

@@ -29,6 +29,7 @@ import {
 } from './gl-utils'
 
 export type GitLabDetailPreviewOptions = {
+  includeReviewDetails?: boolean
   includeImages?: boolean
   maxReplyBytes?: number
   signal?: AbortSignal
@@ -94,7 +95,14 @@ export async function getWorkItemDetails(
     const details =
       type === 'issue'
         ? await fetchIssueDetails(repoPath, projectRef, iid, connectionId, executionOptions)
-        : await fetchMRDetails(repoPath, projectRef, iid, connectionId, executionOptions)
+        : await fetchMRDetails(
+            repoPath,
+            projectRef,
+            iid,
+            connectionId,
+            executionOptions,
+            previewOptions
+          )
     if (!details || !previewOptions.includeImages) {
       return details
     }
@@ -169,7 +177,8 @@ async function fetchMRDetails(
   projectRef: ProjectRef,
   iid: number,
   connectionId?: string | null,
-  localGitOptions: LocalGitExecOptions = {}
+  localGitOptions: LocalGitExecOptions = {},
+  options: { includeReviewDetails?: boolean } = {}
 ): Promise<GitLabWorkItemDetails | null> {
   // Why: MR detail + discussions in parallel. The pipeline jobs fetch
   // depends on `head_pipeline.id` from the MR payload, so it has to
@@ -202,14 +211,22 @@ async function fetchMRDetails(
           localGitOptions
         ).catch(() => [])
       : undefined
+  // Checks consumes the pipeline and discussions without the dialog's review enrichment.
+  const includeReviewDetails = options.includeReviewDetails !== false
   const [reviewers, approvalState, files] = await Promise.all([
-    fetchMRReviewers(repoPath, projectRef, iid, connectionId, localGitOptions).catch(() =>
-      (mrRaw.reviewers ?? []).map(mapGitLabUser).filter((u): u is GitLabAssignableUser => !!u)
-    ),
-    fetchMRApprovalState(repoPath, projectRef, iid, connectionId, localGitOptions).catch(
-      () => undefined
-    ),
-    fetchMRFiles(repoPath, projectRef, iid, connectionId, localGitOptions).catch(() => [])
+    includeReviewDetails
+      ? fetchMRReviewers(repoPath, projectRef, iid, connectionId, localGitOptions).catch(() =>
+          (mrRaw.reviewers ?? []).map(mapGitLabUser).filter((u): u is GitLabAssignableUser => !!u)
+        )
+      : [],
+    includeReviewDetails
+      ? fetchMRApprovalState(repoPath, projectRef, iid, connectionId, localGitOptions).catch(
+          () => undefined
+        )
+      : undefined,
+    includeReviewDetails
+      ? fetchMRFiles(repoPath, projectRef, iid, connectionId, localGitOptions).catch(() => [])
+      : []
   ])
   return {
     item,

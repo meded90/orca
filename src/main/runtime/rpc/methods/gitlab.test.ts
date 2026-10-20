@@ -4,6 +4,7 @@ import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { GITLAB_METHODS } from './gitlab'
+import { WorkItemDetails } from '../../../../shared/rpc-contract/gitlab-params'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
   return { id: 'req-1', authToken: 'tok', method, params }
@@ -293,7 +294,7 @@ describe('gitlab RPC methods', () => {
       8,
       'mr',
       projectRef,
-      { includeImages: undefined, maxReplyBytes: undefined }
+      { includeImages: undefined, includeReviewDetails: undefined, maxReplyBytes: undefined }
     )
     expect(runtime.getGitLabRepoWorkItemByPath).toHaveBeenCalledWith(
       'id:repo-1',
@@ -301,6 +302,32 @@ describe('gitlab RPC methods', () => {
       7,
       'issue'
     )
+  })
+
+  it('forwards the optional Checks scope while old params safely strip it', async () => {
+    const getGitLabRepoWorkItemDetails = vi.fn().mockResolvedValue({ body: 'Details' })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Only the runtime identity and work-item method are exercised by this dispatcher.
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      getGitLabRepoWorkItemDetails
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: GITLAB_METHODS })
+    const params = { repo: 'id:repo-1', iid: 8, type: 'mr', includeReviewDetails: false }
+    await dispatcher.dispatch(makeRequest('gitlab.workItemDetails', params))
+    expect(getGitLabRepoWorkItemDetails).toHaveBeenCalledWith('id:repo-1', 8, 'mr', undefined, {
+      includeImages: undefined,
+      includeReviewDetails: false,
+      maxReplyBytes: undefined
+    })
+    expect(WorkItemDetails.parse(params)).toHaveProperty('includeReviewDetails', false)
+    const oldParams = WorkItemDetails.omit({ includeReviewDetails: true }).parse(params)
+    expect(oldParams).not.toHaveProperty('includeReviewDetails')
+    await dispatcher.dispatch(makeRequest('gitlab.workItemDetails', oldParams))
+    expect(getGitLabRepoWorkItemDetails).toHaveBeenLastCalledWith('id:repo-1', 8, 'mr', undefined, {
+      includeImages: undefined,
+      includeReviewDetails: undefined,
+      maxReplyBytes: undefined
+    })
   })
 
   it('accepts the negotiated ready-for-review update field', async () => {

@@ -106,6 +106,7 @@ export type GitLabApi = {
       type: 'issue' | 'mr'
       includeImages?: boolean
       requestToken?: string
+      includeReviewDetails?: boolean
     }
   ) => Promise<GitLabWorkItemDetails | null>
   cancelWorkItemDetails: (args: { requestToken: string }) => Promise<void>
