@@ -16,6 +16,25 @@ describe('binary capture with a termination barrier', () => {
     expect(result.stderr).toEqual(Buffer.alloc(0))
   })
 
+  it('reports a pre-aborted binary request without starting its producer', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const root = await mkdtemp(join(tmpdir(), 'glab-binary-cancel-'))
+    const marker = join(root, 'started')
+    try {
+      await expect(
+        execFileCaptureToTermination(
+          process.execPath,
+          ['-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'started')`],
+          { encoding: 'buffer', signal: controller.signal, timeout: 10_000 }
+        )
+      ).rejects.toMatchObject({ name: 'AbortError', stdout: Buffer.alloc(0) })
+      await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects binary output above the capture cap', async () => {
     await expect(
       execFileCaptureToTermination(

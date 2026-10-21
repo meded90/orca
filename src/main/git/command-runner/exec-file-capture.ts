@@ -51,18 +51,15 @@ export async function execFileCaptureToTermination(
     maxOutputBytes: options.maxBuffer ?? DEFAULT_GIT_MAX_BUFFER,
     signal: options.signal,
     terminationBarrier: termination ?? true,
-    captureRawOutput: options.encoding === 'buffer',
+    captureStdoutAsBytes: options.encoding === 'buffer',
     onChildTerminated: options.onChildTerminated,
     ...(options.stdin === undefined ? {} : { input: options.stdin })
   })
   const result = await pending
-  const stdout = options.encoding === 'buffer' ? result.stdoutBytes : result.stdout
-  if (stdout === undefined || (options.encoding === 'buffer' && result.stderrBytes === undefined)) {
-    throw new Error('Binary process capture returned no raw output')
-  }
+  const stdout =
+    options.encoding === 'buffer' ? (result.stdoutBytes ?? Buffer.alloc(0)) : result.stdout
   const cleanStderr = termination?.stripControlOutput(result.stderr) ?? result.stderr
-  const stderr =
-    options.encoding === 'buffer' ? (result.stderrBytes ?? Buffer.alloc(0)) : cleanStderr
+  const stderr = options.encoding === 'buffer' ? Buffer.from(cleanStderr) : cleanStderr
   if (
     result.code === 0 &&
     !result.timedOut &&
