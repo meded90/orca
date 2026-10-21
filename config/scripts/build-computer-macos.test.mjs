@@ -24,8 +24,7 @@ it.skipIf(process.platform !== 'darwin')(
       const preamble = `#!${process.execPath}\nimport fs from 'node:fs';import path from 'node:path';\n`
       await writeFile(
         join(tools, 'swift'),
-        preamble +
-          `const args=process.argv.slice(2);
+        `${preamble}const args=process.argv.slice(2);
 const scratch=args[args.indexOf('--scratch-path')+1];
 if(!args.includes('--scratch-path'))throw new Error('Missing architecture scratch path');
 const triple=args[args.indexOf('--triple')+1];
@@ -38,8 +37,7 @@ fs.writeFileSync(path.join(output,'orca-computer-use-macos'),triple);
       )
       await writeFile(
         join(tools, 'lipo'),
-        preamble +
-          `const args=process.argv.slice(2);
+        `${preamble}const args=process.argv.slice(2);
 const inputs=args.slice(1,args.indexOf('-output'));
 const contents=inputs.map(p=>fs.readFileSync(p,'utf8'));
 if(new Set(inputs).size!==2 || new Set(contents).size!==2)throw new Error('Architectures overwritten');
