@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ExpandableMarkdownImage } from './MarkdownImageLightbox'
 import CommentMarkdown from './CommentMarkdown'
@@ -122,4 +123,66 @@ it('opens the authenticated GitLab bytes in the shared pan and zoom dialog', () 
   expect(within(dialog).getByRole('button', { name: 'Zoom in' })).toBeTruthy()
   fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
   expect(screen.queryByRole('dialog', { name: 'private' })).toBeNull()
+})
+
+it('retains controlled lightbox behavior and trigger events for sized previews', () => {
+  const onOpenChange = vi.fn()
+  const onAuxClick = vi.fn()
+  const onClick = vi.fn((event: ReactMouseEvent<HTMLButtonElement>) => event.preventDefault())
+  const { rerender } = render(
+    <ExpandableMarkdownImage
+      src="data:image/png;base64,abc"
+      alt="controlled preview"
+      width="75%"
+      height="50%"
+      open={false}
+      onOpenChange={onOpenChange}
+      triggerLabel="Open attachment"
+      triggerAttributes={{ 'data-attachment': 'private' }}
+      onClick={onClick}
+      onAuxClick={onAuxClick}
+    />
+  )
+  const trigger = screen.getByRole('button', { name: 'Open attachment' })
+  expect(trigger.style.width).toBe('75%')
+  expect(trigger.getAttribute('data-attachment')).toBe('private')
+  fireEvent.click(trigger)
+  expect(onClick).toHaveBeenCalledOnce()
+  expect(onOpenChange).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  fireEvent(trigger, new MouseEvent('auxclick', { bubbles: true, button: 1 }))
+  expect(onAuxClick).toHaveBeenCalledOnce()
+
+  rerender(
+    <ExpandableMarkdownImage
+      src="data:image/png;base64,abc"
+      alt="controlled preview"
+      width="75%"
+      height="50%"
+      open
+      onOpenChange={onOpenChange}
+    />
+  )
+  const dialog = screen.getByRole('dialog', { name: 'controlled preview' })
+  expect(within(dialog).getByAltText('controlled preview').getAttribute('src')).toBe(
+    'data:image/png;base64,abc'
+  )
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+})
+
+it('keeps a missing-source placeholder until a sized preview becomes available', () => {
+  const { rerender } = render(
+    <ExpandableMarkdownImage src={undefined} alt="pending attachment" width="75%" />
+  )
+  expect(screen.getByText('pending attachment')).toBeTruthy()
+  expect(screen.queryByRole('img')).toBeNull()
+
+  rerender(
+    <ExpandableMarkdownImage src="data:image/png;base64,abc" alt="pending attachment" width="75%" />
+  )
+  expect(screen.getByRole('button', { name: 'Expand image' }).style.width).toBe('75%')
+  expect(screen.getByAltText('pending attachment').style.width).toBe('100%')
+  fireEvent.click(screen.getByRole('button', { name: 'Expand image' }))
+  expect(screen.getByRole('dialog', { name: 'pending attachment' })).toBeTruthy()
 })
