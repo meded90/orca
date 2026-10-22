@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { MouseEvent as ReactMouseEvent } from 'react'
+import { createRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ExpandableMarkdownImage } from './MarkdownImageLightbox'
 import CommentMarkdown from './CommentMarkdown'
@@ -39,6 +39,17 @@ describe('ExpandableMarkdownImage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Expand image' }))
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog', { name: 'ui.png' })).toBeNull()
+  })
+
+  it('keeps managing its own open state when a caller observes changes', () => {
+    const onOpenChange = vi.fn()
+    render(<ExpandableMarkdownImage src="blob:shot" alt="shot.png" onOpenChange={onOpenChange} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand image' }))
+    expect(screen.getByRole('dialog', { name: 'shot.png' })).toBeTruthy()
+    expect(onOpenChange).toHaveBeenLastCalledWith(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onOpenChange).toHaveBeenLastCalledWith(false)
   })
 
   it('keeps the parent issue drawer open after Escape and close-button dismissal', () => {
@@ -185,4 +196,41 @@ it('keeps a missing-source placeholder until a sized preview becomes available',
   expect(screen.getByAltText('pending attachment').style.width).toBe('100%')
   fireEvent.click(screen.getByRole('button', { name: 'Expand image' }))
   expect(screen.getByRole('dialog', { name: 'pending attachment' })).toBeTruthy()
+})
+
+it('preserves a trigger footprint and load notifications alongside GitLab dimensions', () => {
+  const triggerRef = createRef<HTMLButtonElement>()
+  const onLoad = vi.fn()
+  const { rerender } = render(
+    <ExpandableMarkdownImage
+      src={undefined}
+      alt="loading preview"
+      triggerRef={triggerRef}
+      triggerStyle={{ width: 320, aspectRatio: '2 / 1' }}
+    />
+  )
+  expect(triggerRef.current).toBe(screen.getByRole('button', { name: 'Expand image' }))
+  expect(triggerRef.current?.style.width).toBe('320px')
+  expect(triggerRef.current?.style.aspectRatio).toBe('2 / 1')
+
+  rerender(
+    <ExpandableMarkdownImage
+      src="data:image/png;base64,abc"
+      alt="loading preview"
+      width="75%"
+      height="50%"
+      triggerRef={triggerRef}
+      triggerStyle={{ aspectRatio: '2 / 1' }}
+      onLoad={onLoad}
+    />
+  )
+  const image = screen.getByAltText('loading preview')
+  expect(triggerRef.current?.style.width).toBe('75%')
+  expect(triggerRef.current?.style.aspectRatio).toBe('2 / 1')
+  Object.defineProperty(image, 'naturalHeight', { configurable: true, value: 400 })
+  fireEvent.load(image)
+  expect(image.style.height).toBe('200px')
+  expect(onLoad).toHaveBeenCalledWith(expect.objectContaining({ target: image }))
+  fireEvent.click(screen.getByRole('button', { name: 'Expand image' }))
+  expect(screen.getByRole('dialog', { name: 'loading preview' })).toBeTruthy()
 })
