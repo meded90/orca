@@ -29,6 +29,7 @@ createHelperApp()
 
 function buildUniversalBinary() {
   const builtBinaries = universalTriples.map((triple) => {
+    // SwiftPM 6.4+ defaults to swiftbuild; keep native products isolated per architecture.
     const buildArgs = [
       'build',
       '-c',
@@ -37,6 +38,8 @@ function buildUniversalBinary() {
       packagePath,
       '--triple',
       triple,
+      '--build-system',
+      'native',
       '--scratch-path',
       path.join(packagePath, '.build', 'universal', triple)
     ]

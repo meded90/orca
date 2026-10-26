@@ -25,6 +25,7 @@ it.skipIf(process.platform !== 'darwin')(
       await writeFile(
         join(tools, 'swift'),
         `${preamble}const args=process.argv.slice(2);
+if(args[args.indexOf('--build-system')+1]!=='native')throw new Error('Missing native build system');
 const scratch=args[args.indexOf('--scratch-path')+1];
 if(!args.includes('--scratch-path'))throw new Error('Missing architecture scratch path');
 const triple=args[args.indexOf('--triple')+1];
