@@ -12,7 +12,6 @@ export async function runProjectRefProbeOnce(
   createProbe: (ownsKey: () => boolean) => Promise<ProjectRef | null>,
   signal?: AbortSignal
 ): Promise<ProjectRef | null> {
-  // Why: joining only a probe that is still young keeps a wedged host's dead
-  // promise from pinning every later retry for the process lifetime (P1-D).
+  // Retire wedged probes so later retries can discover recovered hosts.
   return runCoalescedProbe(projectRefInFlight, cacheKey, createProbe, undefined, signal)
 }
