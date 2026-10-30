@@ -103,6 +103,8 @@ export type GitLabApi = {
       includeImages?: boolean
       requestToken?: string
       includeReviewDetails?: boolean
+      /** A checks-panel poll: refused rather than booting a stopped WSL distro. */
+      background?: boolean
     }
   ) => Promise<GitLabWorkItemDetails | null>
   cancelWorkItemDetails: (args: { requestToken: string }) => Promise<void>

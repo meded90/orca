@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
 import type { Repo } from '../../shared/repo-types'
@@ -66,6 +67,11 @@ const {
   getMergeRequestMock: vi.fn(),
   getMergeRequestForBranchMock: vi.fn(),
   getProjectSlugMock: vi.fn()
+}))
+const readWslDistroRunningStateMock = vi.hoisted(() => vi.fn())
+vi.mock('../wsl-background-distro-gate', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  readWslDistroRunningState: readWslDistroRunningStateMock
 }))
 
 vi.mock('electron', () => ({
@@ -175,6 +181,84 @@ describe('GitLab IPC handlers', () => {
     ]) {
       mock.mockReset()
     }
+    readWslDistroRunningStateMock.mockReset().mockResolvedValue('running')
+  })
+
+  it('refuses a checks-panel MR poll for a stopped WSL distro, but not an explicit open', async () => {
+    setPlatform('win32')
+    readWslDistroRunningStateMock.mockResolvedValue('stopped')
+    getWorkItemDetailsMock.mockResolvedValue({ body: 'Details' })
+    registerGitLabHandlers(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The handlers read only the four accessors storeWithRepos implements.
+      storeWithRepos(
+        [repo()],
+        [
+          {
+            id: 'project-1',
+            displayName: 'Orca',
+            badgeColor: 'blue',
+            sourceRepoIds: ['repo-local'],
+            localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' },
+            createdAt: 0,
+            updatedAt: 0
+          }
+        ]
+      ) as Store
+    )
+    const details = ipcHandlers.get('gitlab:workItemDetails')!
+    const args = { repoPath: '/local/orca', iid: 8, type: 'mr' }
+
+    await expect(details(null, { ...args, background: true })).rejects.toThrow(
+      "WSL distro 'Ubuntu' is not running"
+    )
+    expect(getWorkItemDetailsMock).not.toHaveBeenCalled()
+
+    await details(null, args)
+    expect(getWorkItemDetailsMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a details request cancellable until its guarded read settles', async () => {
+    const sender = Object.assign(new EventEmitter(), { id: 37 })
+    const event = { sender }
+    const started = Promise.withResolvers<void>()
+    getWorkItemDetailsMock.mockImplementation(
+      (
+        _repo,
+        _iid,
+        _type,
+        _preference,
+        _connection,
+        _project,
+        _options,
+        request: { signal: AbortSignal }
+      ) => {
+        started.resolve()
+        return new Promise((_resolve, reject) => {
+          request.signal.addEventListener('abort', () => reject(request.signal.reason), {
+            once: true
+          })
+        })
+      }
+    )
+    registerGitLabHandlers(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The handlers read only the accessors implemented by storeWithRepos.
+      storeWithRepos([repo()]) as Store
+    )
+    const details = ipcHandlers.get('gitlab:workItemDetails')!
+    const cancel = ipcHandlers.get('gitlab:cancelWorkItemDetails')!
+    const pending = details(event, {
+      repoPath: '/local/orca',
+      iid: 8,
+      type: 'mr',
+      background: true,
+      includeImages: true,
+      requestToken: 'guarded-preview'
+    })
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await started.promise
+    await cancel(event, { requestToken: 'guarded-preview' })
+    await rejected
+    expect(sender.listenerCount('destroyed')).toBe(0)
   })
 
   it('resolves repoId and source host context before listing work items', async () => {
@@ -214,31 +298,40 @@ describe('GitLab IPC handlers', () => {
   })
 
   it('forwards the typed search query into listMRs and listWorkItems', async () => {
-    listMergeRequestsMock.mockResolvedValueOnce({ items: [] })
-    listWorkItemsMock.mockResolvedValueOnce({ items: [] })
+    const result = {
+      items: [{ id: 'mr-7', type: 'mr', number: 7 }],
+      page: 3,
+      perPage: 1,
+      totalCount: 0,
+      totalPages: 4
+    }
+    listMergeRequestsMock.mockResolvedValueOnce(result)
+    listWorkItemsMock.mockResolvedValueOnce(result)
     registerGitLabHandlers(storeWithRepos([repo()]) as Store)
 
-    await ipcHandlers.get('gitlab:listMRs')?.(null, {
+    const mergeRequests = await ipcHandlers.get('gitlab:listMRs')?.(null, {
       repoPath: '/local/orca',
       state: 'opened',
-      page: 1,
-      perPage: 20,
+      page: 3,
+      perPage: 1,
       query: '  fix login  '
     })
-    await ipcHandlers.get('gitlab:listWorkItems')?.(null, {
+    const workItems = await ipcHandlers.get('gitlab:listWorkItems')?.(null, {
       repoPath: '/local/orca',
       state: 'opened',
-      page: 1,
-      perPage: 20,
+      page: 3,
+      perPage: 1,
       query: 'fix login'
     })
 
+    expect(mergeRequests).toEqual(result)
+    expect(workItems).toEqual(result)
     // Preserve the query's sixth argument slot; omitting it silently disables search (#6263).
     expect(listMergeRequestsMock).toHaveBeenCalledWith(
       '/local/orca',
       'opened',
+      3,
       1,
-      20,
       undefined,
       'fix login',
       null
@@ -246,8 +339,8 @@ describe('GitLab IPC handlers', () => {
     expect(listWorkItemsMock).toHaveBeenCalledWith(
       '/local/orca',
       'opened',
+      3,
       1,
-      20,
       undefined,
       'fix login',
       null

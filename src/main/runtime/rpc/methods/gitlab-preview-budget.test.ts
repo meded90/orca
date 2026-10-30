@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { remoteRpcContentBudget } from '../../../../shared/remote-rpc-content-budget'
-import { REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES } from '../../../../shared/remote-runtime-memory-limits'
+import { REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES } from '../../../../shared/remote-runtime/remote-runtime-memory-limits'
 import { RpcDispatcher } from '../dispatcher'
 import { GITLAB_METHODS } from './gitlab'
 

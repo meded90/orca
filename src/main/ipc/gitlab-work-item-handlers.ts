@@ -13,6 +13,7 @@ import { getWorkItemDetails } from '../gitlab/work-item-details'
 import type { ProjectRef } from '../gitlab/gl-utils'
 import type { GitLabRepoSelectorArgs } from './gitlab-repo-access'
 import { assertRegisteredRepo, localGitOptionArgs, repoConnectionId } from './gitlab-repo-access'
+import { guardWslUncPathAccess } from '../wsl/wsl-unc-access-gate'
 
 /** Route item requests through the selected repository execution options. */
 export function registerGitLabWorkItemHandlers(store: Store): void {
@@ -58,25 +59,32 @@ export function registerGitLabWorkItemHandlers(store: Store): void {
         includeReviewDetails?: boolean
         includeImages?: boolean
         requestToken?: string
+        /** A checks-panel poll: refused rather than booting a stopped WSL distro (E9). */
+        background?: boolean
       }
     ) => {
       const repo = assertRegisteredRepo(args, store)
+      const localGitOptions = localGitOptionArgs(store, repo)[0] ?? {}
       const controller = detailCancellations.begin(event, args.requestToken)
       try {
-        return await getWorkItemDetails(
-          repo.path,
-          args.iid,
-          args.type,
-          repo.issueSourcePreference,
-          repoConnectionId(repo),
-          undefined,
-          localGitOptionArgs(store, repo)[0] ?? {},
-          {
-            includeReviewDetails: args.includeReviewDetails,
-            includeImages: args.includeImages,
-            ...(controller ? { signal: controller.signal } : {})
-          }
-        )
+        const read = (): ReturnType<typeof getWorkItemDetails> =>
+          getWorkItemDetails(
+            repo.path,
+            args.iid,
+            args.type,
+            repo.issueSourcePreference,
+            repoConnectionId(repo),
+            undefined,
+            localGitOptions,
+            {
+              includeReviewDetails: args.includeReviewDetails,
+              includeImages: args.includeImages,
+              ...(controller ? { signal: controller.signal } : {})
+            }
+          )
+        return await (args.background
+          ? guardWslUncPathAccess(repo.path, read, { wslDistro: localGitOptions.wslDistro })
+          : read())
       } finally {
         detailCancellations.finish(event, args.requestToken, controller)
       }
