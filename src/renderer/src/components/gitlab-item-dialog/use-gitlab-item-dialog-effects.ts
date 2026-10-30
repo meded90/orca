@@ -50,6 +50,7 @@ export function useGitLabItemDetailsEffect(
             iid: item.number,
             type: item.type,
             includeImages: true,
+            includeReviewDetails: false,
             requestToken
           })
           .then((preview) => {

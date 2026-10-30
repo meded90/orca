@@ -1,10 +1,9 @@
-import { createRuntimeGitLabApi, type GitLabApi } from './runtime-gitlab-api'
+import { createRuntimeGitLabApi, GITLAB_RPC_TIMEOUT_MS, type GitLabApi } from './runtime-gitlab-api'
 import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import { forgeCredentialTarget, type ForgeRepoSelector } from './forge-credential-target'
 
 // Why: job logs outlive main's 60s `glab` timeout so its classified error reaches the caller.
 export const JOB_TRACE_TIMEOUT_MS = 65_000
-const GITLAB_RPC_TIMEOUT_MS = 30_000
 
 // Why: a task source names the repo by its id on the server that published it.
 function withSourceRepo(params: unknown, sourceRepoId: string | null): unknown {

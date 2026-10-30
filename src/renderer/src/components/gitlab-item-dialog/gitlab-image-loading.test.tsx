@@ -69,6 +69,7 @@ it('shows text before previews and ignores an old preview after switching items'
     iid: 1,
     type: 'issue',
     includeImages: true,
+    includeReviewDetails: false,
     requestToken: expect.any(String)
   })
   const requestToken = fetch.mock.calls[1][0].requestToken
@@ -137,7 +138,11 @@ it('loads text and previews from the owning server and cancels there on unmount'
   expect(ownerRpc).toHaveBeenLastCalledWith(
     { kind: 'environment', environmentId: 'owner-server' },
     'gitlab.workItemDetails',
-    expect.objectContaining({ repo: 'id:server-repo', includeImages: true }),
+    expect.objectContaining({
+      repo: 'id:server-repo',
+      includeImages: true,
+      includeReviewDetails: false
+    }),
     expect.objectContaining({ signal: previewSignal })
   )
   unmount()

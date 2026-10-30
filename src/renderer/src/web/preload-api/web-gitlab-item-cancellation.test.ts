@@ -1,41 +1,79 @@
-import { expect, it, vi } from 'vitest'
+// @vitest-environment happy-dom
+import { afterEach, expect, it, vi } from 'vitest'
+import {
+  recordRuntimeSubscription,
+  stubRuntimeEnvironmentBridge
+} from '../../runtime/runtime-environment-bridge-fixture'
 
-const callRuntimeResult = vi.hoisted(() => vi.fn())
-
-vi.mock('./web-runtime-calls', () => ({ callRuntimeResult }))
+vi.mock('./web-runtime-session', () => ({
+  requireActiveEnvironment: () => ({ id: 'env' }),
+  manuallyDisconnectedEnvironmentIds: new Set<string>(),
+  updateEnvironmentFromResponse: () => undefined
+}))
 
 import { createGitLabApi } from './web-gitlab-api'
 
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
+
 it('aborts host work for a cancelled item without cancelling another dialog', async () => {
-  const signals = new Map<string, AbortSignal>()
-  callRuntimeResult.mockImplementation(
-    (_method, params: { iid: number }, _timeout, signal: AbortSignal) => {
-      signals.set(String(params.iid), signal)
-      return new Promise((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
-      })
-    }
-  )
+  const first = recordRuntimeSubscription()
+  const second = recordRuntimeSubscription()
+  const subscribe = vi
+    .fn()
+    .mockImplementationOnce(first.subscribe)
+    .mockImplementationOnce(second.subscribe)
+  stubRuntimeEnvironmentBridge({
+    subscribe,
+    cancelSubscription: vi.fn().mockResolvedValue(undefined)
+  })
   const api = createGitLabApi()
-  const first = api.workItemDetails({
+  const firstRequest = api.workItemDetails({
     repoPath: '/repo',
     iid: 1,
     type: 'issue',
     requestToken: 'one',
     includeImages: true
   })
-  const second = api.workItemDetails({
+  const secondRequest = api.workItemDetails({
     repoPath: '/repo',
     iid: 2,
     type: 'issue',
     requestToken: 'two'
   })
-  const firstRejected = expect(first).rejects.toThrow('cancelled')
+  const firstRejected = expect(firstRequest).rejects.toMatchObject({ name: 'AbortError' })
+  await Promise.resolve()
   await api.cancelWorkItemDetails({ requestToken: 'one' })
   await firstRejected
-  expect(signals.get('1')?.aborted).toBe(true)
-  expect(signals.get('2')?.aborted).toBe(false)
-  const secondRejected = expect(second).rejects.toThrow('cancelled')
+  expect(first.unsubscribe).toHaveBeenCalledOnce()
+  expect(second.unsubscribe).not.toHaveBeenCalled()
+  const secondRejected = expect(secondRequest).rejects.toMatchObject({ name: 'AbortError' })
   await api.cancelWorkItemDetails({ requestToken: 'two' })
   await secondRejected
+  expect(second.unsubscribe).toHaveBeenCalledOnce()
+})
+
+it('times out an unresponsive preview and unsubscribes host work after thirty seconds', async () => {
+  vi.useFakeTimers()
+  const subscription = recordRuntimeSubscription()
+  stubRuntimeEnvironmentBridge({
+    subscribe: subscription.subscribe,
+    cancelSubscription: vi.fn().mockResolvedValue(undefined)
+  })
+  const pending = createGitLabApi().workItemDetails({
+    repoPath: '/repo',
+    iid: 1,
+    type: 'mr',
+    requestToken: 'preview',
+    includeImages: true,
+    includeReviewDetails: false
+  })
+  const rejection = expect(pending).rejects.toThrow('timed out')
+  await vi.advanceTimersByTimeAsync(29_999)
+  expect(subscription.unsubscribe).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(1)
+  await rejection
+  expect(subscription.unsubscribe).toHaveBeenCalledOnce()
 })

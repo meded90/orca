@@ -11,6 +11,8 @@ import {
 import { mapRepoPathArg } from './runtime-repo-selector-params'
 import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
 
+export const GITLAB_RPC_TIMEOUT_MS = 30_000
+
 export type GitLabApi = NonNullable<PreloadApi['gl']>
 
 type GitLabApiResult<K extends keyof GitLabApi> = Awaited<ReturnType<GitLabApi[K]>>
